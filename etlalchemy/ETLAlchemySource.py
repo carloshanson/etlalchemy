@@ -1,6 +1,13 @@
+from __future__ import division
+from __future__ import absolute_import
+from builtins import str
+from builtins import zip
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import codecs
 from itertools import islice
-from literal_value_generator import dump_to_sql_statement, dump_to_csv,\
+from .literal_value_generator import dump_to_sql_statement, dump_to_csv,\
     dump_to_oracle_insert_statements
 import random
 from migrate.changeset.constraint import ForeignKeyConstraint
@@ -25,8 +32,8 @@ from sqlalchemy.dialects.postgresql import BYTEA
 import inspect as ins
 import re
 import csv
-from schema_transformer import SchemaTransformer
-from etlalchemy_exceptions import DBApiNotFound
+from .schema_transformer import SchemaTransformer
+from .etlalchemy_exceptions import DBApiNotFound
 import os
 
 # Parse the connn_string to find relevant info for each db engine #
@@ -37,7 +44,7 @@ multiple 'ETLAlchemyTargets' via calls to ETLAlchemySource.migrate().
 See examples (on github) for info...
 """
 
-class ETLAlchemySource():
+class ETLAlchemySource(object):
 
     def __init__(self,
                  conn_string,
@@ -176,9 +183,7 @@ class ETLAlchemySource():
         # Duck-typing to remove
         # database-vendor specific column types
         ##############################
-        base_classes = map(
-            lambda c: c.__name__.upper(),
-            column.type.__class__.__bases__)
+        base_classes = [c.__name__.upper() for c in column.type.__class__.__bases__]
         self.logger.info("({0}) {1}".format(column.name,
             column.type.__class__.__name__))
         self.logger.info("Bases: {0}".format(str(base_classes))) 
@@ -217,7 +222,7 @@ class ETLAlchemySource():
                     # Update varchar(size)
                     if len(data) > max_data_length:
                         max_data_length = len(data)
-                    if isinstance(row[idx], unicode):
+                    if isinstance(row[idx], str):
                         row[idx] = row[idx].encode('utf-8', 'ignore')
                     else:
                         row[idx] = row[idx].decode('utf-8', 'ignore').encode('utf-8')
@@ -263,7 +268,7 @@ class ETLAlchemySource():
                             column.name, str(varchar_length)))
                 if data is not None:
                     null = False
-                    if isinstance(row[idx], unicode):
+                    if isinstance(row[idx], str):
                         row[idx] = row[idx].encode('utf-8', 'ignore')
                 #if row[idx]:
                 #    row[idx] = row[idx].decode('utf-8', 'ignore')
@@ -386,7 +391,7 @@ class ETLAlchemySource():
                     # Do conversion...
                     for r in raw_rows:
                         if r[idx] is not None:
-                            r[idx] = long(r[idx])
+                            r[idx] = int(r[idx])
                 else:
                     column_copy.type = Integer()
                     self.logger.warning("Coercing to 'Integer'")
@@ -480,9 +485,7 @@ class ETLAlchemySource():
         
         cname = column_copy.name
         columnHasGloballyIgnoredSuffix = len(
-            filter(
-                lambda s: cname.find(s) > -1,
-                self.global_ignored_col_suffixes)) > 0
+            [s for s in self.global_ignored_col_suffixes if cname.find(s) > -1]) > 0
 
         oldColumns = self.current_ordered_table_columns
         oldColumnsLength = len(self.current_ordered_table_columns)
@@ -537,8 +540,8 @@ class ETLAlchemySource():
             del self.indexes[T.name]
             del self.fks[T.name]
             self.deleted_table_count += 1
-            self.deleted_columns += map(lambda c: T.name +
-                                       "." + c.name, T.columns)
+            self.deleted_columns += [T.name +
+                                       "." + c.name for c in T.columns]
             self.deleted_column_count += len(T.columns)
             return None
         return True
@@ -665,7 +668,7 @@ class ETLAlchemySource():
             host = self.dst_engine.url.host
             self.logger.info(
                 "Sending data to target MySQL instance...(Fast [mysqlimport])")
-            columns = map(lambda c: "\`{0}\`".format(c), columns)
+            columns = ["\`{0}\`".format(c) for c in columns]
             cmd = ("mysqlimport -v -h{0} -u{1} -p{2} "
                        "--compress "
                        "--local "
@@ -779,10 +782,8 @@ class ETLAlchemySource():
                 if not self.enable_mssql_bulk_insert and\
                    self.dst_engine.dialect.name.lower() == "mssql":
                     dump_to_sql_statement(T.insert().values(
-                            map(lambda r:
-                                dict(zip(self.current_ordered_table_columns,
-                                         r)),
-                                raw_rows)
+                            [dict(list(zip(self.current_ordered_table_columns,
+                                         r))) for r in raw_rows]
                             ), fp, self.dst_engine, T.name)
                 elif self.dst_engine.dialect.name.lower() == "oracle":
                     self.logger.warning(
@@ -812,7 +813,7 @@ class ETLAlchemySource():
                     "We are unable to Upsert into this table without " +\
                     "identifying unique rows based on PKs!".format(T.name)
                 raise Exception(s)
-            unique_columns = filter(lambda c: c.name.lower() in pks, T.columns)
+            unique_columns = [c for c in T.columns if c.name.lower() in pks]
             self.logger.info(
                 "Unique columns are '{0}'".format(
                     str(unique_columns)))
@@ -842,13 +843,11 @@ class ETLAlchemySource():
                     with open(data_file_path, "a+") as fp:
                         stmt = T.update()\
                                .where(and_(*tuple(
-                                   map(lambda pk:
-                                       T.columns[pk] ==
+                                   [T.columns[pk] ==
                                        row[self.current_ordered_table_columns
-                                           .index(pk)],
-                                       pks))))\
-                               .values(dict(zip(
-                                   self.current_ordered_table_columns, row)))
+                                           .index(pk)] for pk in pks])))\
+                               .values(dict(list(zip(
+                                   self.current_ordered_table_columns, row))))
                         dump_to_sql_statement(stmt, fp, self.dst_engine, T.name)
                     del raw_rows[r]
             #################################
@@ -859,7 +858,7 @@ class ETLAlchemySource():
                              " rows, and dumping to '" +
                              str(T.name) +
                              ".sql' (because they DNE in the table!).")
-            insertionCount = (len(raw_rows) / 1000) + 1
+            insertionCount = (old_div(len(raw_rows), 1000)) + 1
             raw_row_len = len(raw_rows)
             if len(raw_rows) > 0:
                 self.logger.info(
@@ -984,7 +983,7 @@ class ETLAlchemySource():
                 #########################################################
                 # Generate the mapping of 'column_name' -> 'list index'
                 ########################################################
-                cols = map(lambda c: c.name, T_src.columns)
+                cols = [c.name for c in T_src.columns]
                 self.current_ordered_table_columns = [None] * len(cols)
                 self.original_ordered_table_columns = [None] * len(cols)
                 for i in range(0, len(cols)):
@@ -1005,7 +1004,7 @@ class ETLAlchemySource():
                 self.logger.info("Loading all rows into memory...")
                 rows = []
 
-                for i in range(1, (cnt / buffer_size) + 1):
+                for i in range(1, (old_div(cnt, buffer_size)) + 1):
                     self.logger.info(
                         "Fetched {0} rows".format(str(i * buffer_size)))
                     rows += resultProxy.fetchmany(buffer_size)
@@ -1104,7 +1103,7 @@ class ETLAlchemySource():
                     # Create buffers of "100000" rows
                     # TODO: Parameterize "100000" as 'buffer_size' (should be
                     # configurable)
-                    insertionCount = (len(raw_rows) / row_buffer_size) + 1
+                    insertionCount = (old_div(len(raw_rows), row_buffer_size)) + 1
                     raw_row_len = len(raw_rows)
                     self.total_rows += raw_row_len
                     if len(raw_rows) > 0:
@@ -1156,20 +1155,20 @@ class ETLAlchemySource():
 
                 extraction_dt = t_start_transform - t_start_extract
                 extraction_dt_str = str(
-                    extraction_dt.seconds / 60) + "m:" + \
+                    old_div(extraction_dt.seconds, 60)) + "m:" + \
                     str(extraction_dt.seconds % 60) + "s"
 
                 transform_dt = t_start_dump - t_start_transform
                 transform_dt_str = str(
-                    transform_dt.seconds / 60) + "m:" + \
+                    old_div(transform_dt.seconds, 60)) + "m:" + \
                     str(transform_dt.seconds % 60) + "s"
 
                 dump_dt = t_start_load - t_start_dump
-                dump_dt_str = str(dump_dt.seconds / 60) + \
+                dump_dt_str = str(old_div(dump_dt.seconds, 60)) + \
                     "m:" + str(dump_dt.seconds % 60) + "s"
 
                 load_dt = t_stop_load - t_start_load
-                load_dt_str = str(load_dt.seconds / 60) + \
+                load_dt_str = str(old_div(load_dt.seconds, 60)) + \
                     "m:" + str(load_dt.seconds % 60) + "s"
 
                 self.times[table_name][
@@ -1193,7 +1192,7 @@ class ETLAlchemySource():
         # Add Indexes (Some db's require indexed references...
         ############################
         idx_count = 0
-        for table_name in self.indexes.keys():
+        for table_name in list(self.indexes.keys()):
             t_start_index = datetime.now()
             pre_transformed_table_name = table_name
 
@@ -1331,7 +1330,7 @@ class ETLAlchemySource():
             t_stop_index = datetime.now()
             index_dt = t_stop_index - t_start_index
             self.times[pre_transformed_table_name]['Indexing Time'] = \
-                str(index_dt.seconds / 60) + "m:" + \
+                str(old_div(index_dt.seconds, 60)) + "m:" + \
                 str(index_dt.seconds % 60) + "s"
 
         self.index_count = idx_count
@@ -1373,7 +1372,7 @@ class ETLAlchemySource():
             self.logger.warning("Can't disable foreign key checks...")
 
         inspector = self.tgt_insp
-        for table_name in self.fks.keys():
+        for table_name in list(self.fks.keys()):
             pre_transformed_table_name = table_name
             t_start_constraint = datetime.now()
             fks = self.fks[table_name]
@@ -1423,9 +1422,7 @@ class ETLAlchemySource():
                      cons_column_transformer[c].new_column not in ["", None]:
                         c = cons_column_transformer[c].new_column
                     constrained_columns.append(c)
-                constrained_cols = filter(lambda c: c is not None,
-                        map(lambda x: T.columns.get(x),
-                              constrained_columns))
+                constrained_cols = [c for c in [T.columns.get(x) for x in constrained_columns] if c is not None]
                          
 
                 ################################
@@ -1494,8 +1491,7 @@ class ETLAlchemySource():
                      ref_column_transformer[c].newColumns not in ["", None]:
                         c = ref_column_transformer[c].newColumn
                     ref_columns.append(c)
-                referred_columns = map(
-                    lambda x: T_ref.columns.get(x), ref_columns)
+                referred_columns = [T_ref.columns.get(x) for x in ref_columns]
                 self.logger.info("Ref Columns: " + str(ref_columns))
                 if len(referred_columns) < len(fk['referred_columns']):
                     self.logger.warning("Skipping FK constraint '" +
@@ -1555,7 +1551,7 @@ class ETLAlchemySource():
                             self.referential_integrity_violations += len(
                                 bad_rows)
                             for row in bad_rows:
-                                self.riv_arr.append(str(row.values()))
+                                self.riv_arr.append(str(list(row.values())))
 
                     else:
                         self.logger.warning(
@@ -1627,7 +1623,7 @@ class ETLAlchemySource():
                 self.fk_count += 1
             t_stop_constraint = datetime.now()
             constraint_dt = t_stop_constraint - t_start_constraint
-            constraint_dt_str = str(constraint_dt.seconds / 60) + "m:" +\
+            constraint_dt_str = str(old_div(constraint_dt.seconds, 60)) + "m:" +\
                 str(constraint_dt.seconds % 60) + "s"
 
             self.times[pre_transformed_table_name][
@@ -1639,7 +1635,7 @@ class ETLAlchemySource():
         timeString = ""
         # if dt.seconds > 3600:
         #    timeString += (str(int(dt.seconds / 3600)) + ":")
-        timeString += str(dt.seconds / 60) + "m:" + str(dt.seconds % 60) + "s"
+        timeString += str(old_div(dt.seconds, 60)) + "m:" + str(dt.seconds % 60) + "s"
         self.logger.info("""
        ========================
        === * Sync Summary * ===
@@ -1687,7 +1683,7 @@ class ETLAlchemySource():
             str(self.deleted_table_count),
             str(self.deleted_column_count),
             str(self.total_rows),
-            str(self.total_rows / ((dt.seconds / 60) or 1))))
+            str(old_div(self.total_rows, ((old_div(dt.seconds, 60)) or 1)))))
         # self.logger.warning("Referential Integrity " +
         # "Violations: \n" + "\n".join(self.riv_arr))
         self.logger.warning(
@@ -1722,7 +1718,7 @@ class ETLAlchemySource():
             "Load Time (Into Target)",
             "Indexing Time",
             "Constraint Time"]
-        for (table_name, timings) in self.times.iteritems():
+        for (table_name, timings) in self.times.items():
             self.logger.info(table_name)
             for key in ordered_timings:
                 self.logger.info("-- " + str(key) + ": " +
@@ -1748,5 +1744,4 @@ class ETLAlchemySource():
         ###########################################
         removedColumns = self.deleted_columns + self.null_columns
         with open("deleted_columns.csv", "w") as fp:
-            fp.write("\n".join(map(lambda c:
-                     c.replace(".", ","), removedColumns)))
+            fp.write("\n".join([c.replace(".", ",") for c in removedColumns]))

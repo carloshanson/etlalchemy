@@ -1,11 +1,16 @@
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from past.builtins import basestring
 import shutil
 import decimal
 import datetime
 # Find the best implementation available on this platform
 try:
-    from cStringIO import StringIO
+    from io import StringIO
 except:
-    from StringIO import StringIO
+    from io import StringIO
 
 def _generate_literal_value_for_csv(value, dialect):
     dialect_name = dialect.name.lower()
@@ -21,7 +26,7 @@ def _generate_literal_value_for_csv(value, dialect):
         return "NULL"
     elif isinstance(value, bool):
         return "%s" % int(value)
-    elif isinstance(value, (float, int, long)):
+    elif isinstance(value, (float, int)):
         return "%s" % value
     elif isinstance(value, decimal.Decimal):
         return str(value)
@@ -87,7 +92,7 @@ def _generate_literal_value(value, dialect):
         return "NULL"
     elif isinstance(value, bool):
         return "%s" % int(value)
-    elif isinstance(value, (float, int, long)):
+    elif isinstance(value, (float, int)):
         return "%s" % value
     elif isinstance(value, decimal.Decimal):
         return str(value)
@@ -151,13 +156,13 @@ def dump_to_oracle_insert_statements(fp, engine, table, raw_rows, columns):
         if i == num_rows-1:
             # Last row...
             lines.append("SELECT " +
-                         ",".join(map(lambda c: _generate_literal_value(
-                             c, dialect), raw_rows[i])) +
+                         ",".join([_generate_literal_value(
+                             c, dialect) for c in raw_rows[i]]) +
                          " FROM DUAL\n")
         else:
             lines.append("SELECT " +
-                         ",".join(map(lambda c: _generate_literal_value(
-                             c, dialect), raw_rows[i])) +
+                         ",".join([_generate_literal_value(
+                             c, dialect) for c in raw_rows[i]]) +
                          " FROM DUAL UNION ALL\n")
     fp.write(''.join(lines))
 

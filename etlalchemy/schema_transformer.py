@@ -1,11 +1,14 @@
+from builtins import str
+from builtins import range
+from builtins import object
 import logging
 import csv
 import sqlalchemy
 
 
-class SchemaTransformer():
+class SchemaTransformer(object):
 
-    class TableTransformation():
+    class TableTransformation(object):
         def __init__(self, stRow):
             self.delete = stRow['Delete'].lower() in ["true", "1"]
             self.old_table = stRow['Table Name']
@@ -15,7 +18,7 @@ class SchemaTransformer():
             return "({0} -> {1}...Delete = {2})".\
                 format(self.old_table, self.new_table, str(self.delete))
 
-    class ColumnTransformation():
+    class ColumnTransformation(object):
         def __init__(self, stRow):
             self.delete = stRow['Delete'].lower() in ["true", "1"]
             self.old_table = stRow['Table Name']
@@ -139,7 +142,7 @@ class SchemaTransformer():
 
         if not action_applied:
             # Then the column had no 'action' applied to it...
-            for k in self.global_renamed_col_suffixes.keys():
+            for k in list(self.global_renamed_col_suffixes.keys()):
                 # Check if column name ends with specfiic suffix
                 if initial_column_name.lower().endswith(k.lower()):
                     self.logger.info(

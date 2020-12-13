@@ -1,11 +1,14 @@
-from etlalchemy_exceptions import DBApiNotFound
+from __future__ import absolute_import
+from builtins import str
+from builtins import object
+from .etlalchemy_exceptions import DBApiNotFound
 from sqlalchemy_utils import database_exists, create_database, drop_database
 from sqlalchemy import create_engine, MetaData
 # import dill
 import logging
 
 
-class ETLAlchemyTarget():
+class ETLAlchemyTarget(object):
     def __init__(self, conn_string, drop_database=False):
         self.drop_database = drop_database
         self.conn_string = conn_string
