@@ -203,6 +203,13 @@ class ETLAlchemySource(object):
                 column_copy.type.name = str(column).replace(".", "_")
             else:
                 column_copy.type.__class__ = column.type.__class__.__bases__[0]
+
+        elif "TIMESTAMP" in base_classes:
+            # MSSQL error: 'A table can only have one timestamp column.'
+            if self.dst_engine.dialect.name.lower() in ["mssql"]:
+                self.logger.info("MSSQL can only have one timestamp column, so set to datetime.")
+                column_copy.type = DateTime()
+
         elif "STRING" in base_classes\
                 or "VARCHAR" in base_classes\
                 or "TEXT" in base_classes:
